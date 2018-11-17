@@ -112,7 +112,6 @@ void handleRoot() {
   if (server.hasHeader("User-Agent")) {
     content += "the user agent used is : " + server.header("User-Agent") + "<br><br>";
   }
-
   content += "You can access this page until you <a href=\"/login?DISCONNECT=YES\">disconnect</a> <br/> <a href=\"/info\">info3</a> </body></html>";
 
   server.send(200, "text/html", content);
@@ -302,35 +301,19 @@ boolean sendReading() {
 }
 
 
-
-void setup(void) {
-  Serial.begin(115200);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  Serial.println("");
-
-
-
-  // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-
-  Serial.println("");
-  Serial.print("Connected to ");
-  Serial.println(ssid);
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-
-
+void startWEBServer(void){
+  const char * headerkeys[] = {"User-Agent", "Cookie"} ;
+  size_t headerkeyssize = sizeof(headerkeys) / sizeof(char*);
+  
   server.on("/", handleRoot);
   server.on("/login", handleLogin);
+  server.on("/info", handleInfo); 
+  server.onNotFound(handleNotFound);  
+  
   server.on("/inline", []() {
     server.send(200, "text/plain", "this works without need of authentification");
   });
-  server.on("/info", handleInfo);
+  
   server.on("/update", HTTP_POST, []() {
     server.sendHeader("Connection", "close");
     server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
@@ -360,31 +343,48 @@ void setup(void) {
     yield();
   });
 
-  server.onNotFound(handleNotFound);
 
-  //here the list of headers to be recorded
-
-  const char * headerkeys[] = {"User-Agent", "Cookie"} ;
-  size_t headerkeyssize = sizeof(headerkeys) / sizeof(char*);
   //ask server to track these headers
   server.collectHeaders(headerkeys, headerkeyssize);
   server.begin();
   Serial.println("HTTP server started");
-
-
-
-  //Setting up interrupt ISR on D2 (INT0), trigger function "CLK_ISR()" when INT0 (CLK)is rising
-  attachInterrupt(digitalPinToInterrupt(CLKPin), CLK_ISR, RISING);
-  //Set the CLK-pin (D5) to input
-  pinMode(CLKPin, INPUT);
-  //Set the MISO-pin (D5) to input
-  pinMode(MISOPin, INPUT);
-
-  clearTallys();
-
-
+	
+	
 }
 
+//----------------------------- S E T U P ---------------
+void setup(void) {
+  Serial.begin(115200);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+
+  // Trying connect to WiFi
+  Serial.println("");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.print("Connected to ");
+  Serial.println(ssid);
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  // Start WEBServer  
+  startWEBServer();
+
+  // SPI work init
+  attachInterrupt(digitalPinToInterrupt(CLKPin), CLK_ISR, RISING);
+  pinMode(CLKPin, INPUT);
+  pinMode(MISOPin, INPUT);
+  clearTallys();
+  // RelePin init
+
+  pinMode(RelePin, OUTPUT);
+  digitalWrite(RelePin, LOW);
+}
+
+
+//----------------------------- L O O P ----------------
 void loop(void) {
   server.handleClient();
 
